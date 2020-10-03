@@ -79,7 +79,7 @@ WSGI_APPLICATION = 'APParent.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'APParent',
+        'NAME': 'apparent2',
     }
 }
 
