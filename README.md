@@ -42,7 +42,6 @@ Child Summary Page
 [Click here to access our pitch deck](https://docs.google.com/presentation/d/1WUmGvr7uZbOqYtDaF9uMTxjoTmfDJF2cADpD9a2oUGU/edit#slide=id.gcb9a0b074_1_0)
 
 # Functionality
-Coming Soon
 
 ## User Authentication
 This app utilizes Django's built-in authentication functionality provided by the 'django.contrib.auth' app which is included within the 'INSTALLED APPS' list in 'settings.py'
@@ -61,6 +60,10 @@ Users can also create Goals for each child assigned to them.  Each goal logs who
 
 ## Meetings
 Users can also create meeting invites for each user.  A user can setup his/her availability and other users can only invite users during those available times.
+
+## Future Plans
+* Implement live chat feature.
+* Update styling
 
 
 
