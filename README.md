@@ -2,7 +2,7 @@
 A one-stop Django app for parents to communicate with teachers and professionals to keep track of their child's progress.
 
 # Getting Started
-Coming Soon...
+Click [here](http://apparent.herokuapp.com/) to access the app.
 
 # Technologies Used
 * Django
@@ -16,8 +16,27 @@ Coming Soon...
 # ERD
 ![image](https://i.imgur.com/bm765lt.png)
 
-# Wireframes + Screenshots of Completed Project
-Coming Soon...
+# Wireframes 
+Login Page
+![image](https://i.imgur.com/0cNhzY5.png)
+
+Parent Verification Page
+![image](https://i.imgur.com/HiCn0WF.png)
+
+Parent Sign Up Form
+![image](https://i.imgur.com/sGRjqsf.png)
+
+Non-Parent Sign Up Form
+![image](https://i.imgur.com/47litgD.png)
+
+Child Registration Form
+![image](https://i.imgur.com/Mvdh3hk.png)
+
+Select a Child Page
+![image](https://i.imgur.com/cOn2GSc.png)
+
+Child Summary Page
+![image](https://i.imgur.com/ydysIBD.png)
 
 # Pitch Deck
 [Click here to access our pitch deck](https://docs.google.com/presentation/d/1WUmGvr7uZbOqYtDaF9uMTxjoTmfDJF2cADpD9a2oUGU/edit#slide=id.gcb9a0b074_1_0)
