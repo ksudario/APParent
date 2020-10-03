@@ -228,7 +228,21 @@ def add_picture(request, child_id):
             print('An error occurred uploading file to S3')
     return redirect('child_detail', child_id=child_id)
 
-        
+def change_picture(request, picture_id, child_id):
+    picture_file = request.FILES.get('picture-file', None)
+    picture = Picture.objects.get(id=picture_id)
+    picture.delete()
+    if picture_file:
+        s3 = boto3.client('s3')
+        key = uuid.uuid4().hex[:6] + picture_file.name[picture_file.name.rfind('.'):]
+        try:
+            s3.upload_fileobj(picture_file, BUCKET, key)
+            url = f"{S3_BASE_URL}{key}"
+            picture = Picture(url=url, child_id=child_id)
+            picture.save()
+        except:
+            print('An error occurred uploading file to S3')
+    return redirect('child_detail', child_id=child_id)
 
 @login_required
 def child_detail(request, child_id):
@@ -239,14 +253,18 @@ def child_detail(request, child_id):
         picture = picture[0]
     teammates = child.profile_set.all()
     other_parents = []
+    professionals = []
 
     for teammate in teammates:
         if teammate.is_parent and teammate.user.id != current_user.profile.user.id:
             other_parents.append(teammate)
+        elif teammate.is_parent == False and teammate.user.id != current_user.profile.user.id:
+            professionals.append(teammate)
 
     return render(request, 'children/detail.html', {
         'child': child,
         'other_parents': other_parents,
+        'professionals': professionals,
         'current_user': current_user,
         'picture' : picture,
     })
@@ -259,9 +277,24 @@ def child_summary(request, child_id):
     max_summaries = 2
     today = date.today()
     one_week_ago = today - timedelta(days = 7)
+    created_meetings = current_user.meeting_invitee.filter(child=child_id)
+    meetings_invited_to = current_user.meeting_created_by.filter(child=child_id)
     recent_report_cards = []
     recent_goals = []
     recent_daily_reports = []
+    accepted_meetings = []
+    new_meetings = []
+
+    for meeting in created_meetings:
+        if meeting.accepted and len(accepted_meetings) < max_summaries:
+            accepted_meetings.append(meeting)
+
+    for meeting in meetings_invited_to:
+        if meeting.accepted and len(accepted_meetings) < max_summaries:
+            accepted_meetings.append(meeting)
+        elif len(new_meetings) < max_summaries:
+            new_meetings.append(meeting)
+
     for report_card in child.report_card_set.all():
         if report_card.created_at.date() >= one_week_ago and len(recent_report_cards) < max_summaries:
             recent_report_cards.append(report_card)
@@ -278,6 +311,8 @@ def child_summary(request, child_id):
         'recent_report_cards': recent_report_cards,
         'recent_goals': recent_goals,
         'recent_daily_reports': recent_daily_reports,
+        'accepted_meetings': accepted_meetings,
+        'new_meetings': new_meetings,
     })
 
 @login_required
@@ -353,6 +388,8 @@ def edit_name(request):
         # change name fields
         user.first_name = request.POST.get('first_name')
         user.last_name = request.POST.get('last_name')
+        user.profile.first_name = request.POST.get('first_name')
+        user.profile.last_name = request.POST.get('last_name')
         user.save()
         # redirect to profile  page
         return redirect('profile')
@@ -454,6 +491,7 @@ def goals_index(request, child_id):
 @login_required
 def add_goal(request, child_id):
     user = request.user
+    child = Child.objects.get(id=child_id)
     child= Child.objects.get(id=child_id)
     goal_tracker = TRACKER
 
@@ -470,21 +508,28 @@ def add_goal(request, child_id):
         print(goal)
         return redirect('goals_index', child_id=child_id)
     print(user)
-    return render(request, 'goals/add.html', {'child_id': child_id, 'user':user, 'goal_tracker': goal_tracker})
+    return render(request, 'goals/add.html', {
+        'child_id': child_id,
+        'child':child, 
+        'user':user, 
+        'goal_tracker': goal_tracker})
 
 
 @login_required
 def goal_detail(request, child_id, goal_id):
     goal = Goal.objects.get(id=goal_id)
+    child = Child.objects.get(id=child_id)
     current_user = request.user
     return render(request, 'goals/detail.html', {
         'child_id' : child_id,
+        'child': child,
         'goal_id': goal_id,
         'goal': goal,
     })
 
 @login_required
 def goal_edit(request, child_id, goal_id):
+    child = Child.objects.get(id=child_id)
     goal = Goal.objects.get(id=goal_id)
     goal_tracker = TRACKER
     user = request.user
@@ -498,7 +543,13 @@ def goal_edit(request, child_id, goal_id):
 
         print(goal_edit)
         return redirect('goal_detail', child_id=child_id, goal_id=goal.id)
-    return render(request, 'goals/edit.html', { 'child_id': child_id, 'goal': goal, 'user':user, 'goal_tracker': goal_tracker })
+    return render(request, 'goals/edit.html', {
+        'child_id': child_id, 
+        'child': child,
+        'goal': goal, 
+        'user':user, 
+        'goal_tracker': goal_tracker 
+    })
 
 @login_required
 def goal_delete(request, child_id, goal_id):
@@ -579,14 +630,16 @@ def add_daily_report(request, child_id):
         #print(daily_report)
         return redirect('daily_reports_index', child_id=child_id)
     print(user)
-    return render(request, 'daily_report/add.html',{'child_id':child_id, 'user':user, 'daily_report_rating':daily_report_rating})
+    return render(request, 'daily_report/add.html',{'child_id':child_id, 'child':child, 'user':user, 'daily_report_rating':daily_report_rating})
 
 @login_required
 def daily_report_detail(request, child_id, daily_report_id):
     daily_report = Daily_report.objects.get(id=daily_report_id)
+    child = Child.objects.get(id=child_id)
     current_user = request.user
     return render(request, 'daily_report/detail.html', {
         'child_id': child_id,
+        'child': child,
         'daily_report_id':daily_report_id,
         'daily_report':daily_report,
     })
@@ -594,6 +647,7 @@ def daily_report_detail(request, child_id, daily_report_id):
 @login_required
 def daily_report_edit(request, child_id, daily_report_id):
     daily_report = Daily_report.objects.get(id=daily_report_id)
+    child = Child.objects.get(id=child_id)
     daily_report_rating = RATING
     user = request.user
 
@@ -608,6 +662,7 @@ def daily_report_edit(request, child_id, daily_report_id):
       
     return render(request, 'daily_report/edit.html', {
         'child_id':child_id, 
+        'child': child,
         'daily_report': daily_report, 
         'user': user, 
         'daily_report_rating': daily_report_rating
@@ -646,11 +701,50 @@ def meetings(request, child_id):
     child = Child.objects.get(id=child_id)
     does_have_teammates = child.profile_set.all().count() > 1
     current_user = request.user
+    created_meetings = current_user.meeting_invitee.filter(child=child_id)
+    meetings_invited_to = current_user.meeting_created_by.filter(child=child_id)
+
+
+    accepted_meetings = []
+    new_meetings = []
+    meetings_requested = []
+
+    for meeting in created_meetings:
+        if meeting.accepted:
+            accepted_meetings.append(meeting)
+        else:
+            meetings_requested.append(meeting)
+
+    for meeting in meetings_invited_to:
+        if meeting.accepted:
+            accepted_meetings.append(meeting)
+        else:
+            new_meetings.append(meeting)
+
+    print(accepted_meetings)
+    print(new_meetings)
+    print(meetings_requested)
+
     return render(request, 'meetings/index.html', {
         'child': child,
         'does_have_teammates': does_have_teammates,
         'current_user': current_user,
+        'accepted_meetings': accepted_meetings,
+        'new_meetings': new_meetings,
+        'meetings_requested': meetings_requested,
     })
+
+@login_required
+def accept_meeting(request, child_id, meeting_id):
+    meeting = Meeting.objects.get(id=meeting_id)
+    child = Child.objects.get(id=child_id)
+    current_user = request.user
+
+    meeting.accepted = True
+    meeting.save()
+
+
+    return redirect("meetings", child_id=child_id)
 
 @login_required
 def add_meeting(request, child_id):
@@ -674,28 +768,56 @@ def add_meeting(request, child_id):
         'current_user': current_user,
     })
 
-@login_required
-def set_date(request, child_id, teammate_id):
-    child = Child.objects.get(id=child_id)
-    teammate = User.objects.get(id=teammate_id)
-    current_user = request.user
+def get_possible_times(times_for_day):
 
-    availability_events = teammate.availability_event_set.all()
-    # print(availability_events)
-    possible_weekdays = []
-    for availability_event in availability_events:
-        weekday = [availability_event.start.weekday(), calendar.day_name[availability_event.start.weekday()]]
-        if weekday not in possible_weekdays:
-            possible_weekdays.append(weekday)
-    possible_weekdays.sort()
-    print(possible_weekdays)
+    # get all time intervals
+    hours = []
+    minutes = []
+    for i in range (0, 24):
+        hours.append(i)
+    for i in range(0, 60, 15):
+        minutes.append(i)
+
+    # initialize array of possible times
+    possible_times = []
+    # iterate through all hours in a day
+    for hour in hours:
+        # for every availability window
+        for time_for_day in times_for_day:
+            # if the hour is within availability window
+            if hour >= time_for_day.start.hour and hour <= time_for_day.end.hour:
+                # iterate through minutes
+                for minute in minutes:
+                    # if availability window is only within one hour
+                    if time_for_day.start.hour == time_for_day.end.hour:
+                        # only grab minutes of availability
+                        if minute >= time_for_day.start.minute and minute < time_for_day.end.minute:
+                            possible_times.append([hour, minute])
+                    else:
+                        # do not add if is last minute and last hour of availability
+                        if hour == time_for_day.end.hour and minute == time_for_day.end.minute:
+                            pass
+                        # grab times after start time and before end time if the hour is the first hour
+                        elif hour == time_for_day.start.hour:
+                            if minute >= time_for_day.start.minute:
+                                possible_times.append([hour, minute])
+                        # grab all times if before the last hour of availability
+                        elif hour < time_for_day.end.hour:
+                            possible_times.append([hour, minute])
+                        elif hour == time_for_day.end.hour:
+                            if minute <= time_for_day.end.minute:
+                                possible_times.append([hour, minute])
+        
+    return possible_times
+
+def get_taken_days(teammate, possible_weekdays, availability_events):
 
     taken_times = []
     for weekday in possible_weekdays:
         taken_times.append({
             weekday[0]: {}
         })
-    print(taken_times)
+    # print(taken_times)
 
     # first grab all meetings where teammate is invited
     teammate_meetings = teammate.meeting_invitee.all()
@@ -734,7 +856,8 @@ def set_date(request, child_id, teammate_id):
                             taken_time_weekday[weekday][year][month] = {day: []}
                         # finally add times to date
                         time = [taken_time["hour"], taken_time["minute"]]
-                        taken_time_weekday[weekday][year][month][day].append(time)
+                        if time not in taken_time_weekday[weekday][year][month][day]:
+                            taken_time_weekday[weekday][year][month][day].append(time)
                         taken_time_weekday[weekday][year][month][day].sort()
 
     # next grab all meetings teammate has created
@@ -773,73 +896,53 @@ def set_date(request, child_id, teammate_id):
                     taken_time_weekday[weekday][year][month] = {day: []}
                 # finally add times to date
                 time = [taken_time["hour"], taken_time["minute"]]
-                taken_time_weekday[weekday][year][month][day].append(time)
+                if time not in taken_time_weekday[weekday][year][month][day]:
+                    taken_time_weekday[weekday][year][month][day].append(time)
                 taken_time_weekday[weekday][year][month][day].sort()
 
     print(taken_times)
 
     # next we want to check if all available times
     # have been taken for a given day
+    taken_days = []
     for taken_time in taken_times:
         for weekday in taken_time:
             for year in taken_time[weekday]:
                 for month in taken_time[weekday][year]:
                     for day in taken_time[weekday][year][month]:
                         times = taken_time[weekday][year][month][day]
-                        print(times)
+                        # print(times)
+                        times_for_day = []
                         for availability_event in availability_events:
-                            # first check if start time and end time match
-                            first_match = False
-                            if availability_event.start.hour == times[0][0]:
-                                first_match = True
-                            print(first_match)
+                            if availability_event.start.weekday() == weekday:
+                                # get all availability windows that match current day
+                                times_for_day.append(availability_event)
+                                # print(times_for_day)
+                            # check if number of meetings taken matches number of available meetings
+                            possible_times = get_possible_times(times_for_day)
+                            if len(possible_times) == len(times) and [year, month, day] not in taken_days:
+                                taken_days.append([year, month, day])
+    # print(taken_days)
 
+    return [taken_times, taken_days]
 
-                        #     if availability_event.end.hour == time[0] or availability_event.end.minute == 0 and availability_event.end.hour == time[0] - 1:
-                        #         # print(availability_event.end.minute)
-                        # for time in times:
-                        #     pass
+@login_required
+def set_date(request, child_id, teammate_id):
+    child = Child.objects.get(id=child_id)
+    teammate = User.objects.get(id=teammate_id)
+    current_user = request.user
 
+    availability_events = teammate.availability_event_set.all()
+    # print(availability_events)
+    possible_weekdays = []
+    for availability_event in availability_events:
+        weekday = [availability_event.start.weekday(), calendar.day_name[availability_event.start.weekday()]]
+        if weekday not in possible_weekdays:
+            possible_weekdays.append(weekday)
+    possible_weekdays.sort()
 
-
-
-
-
-
-
-
-
-
-
-
-    # days_with_meetings = []
-    # taken_days = []
-    # for taken_time in taken_times:
-    #     meeting_day = [taken_time["weekday"], taken_time["year"], taken_time["month"], taken_time["day"]]
-    #     if meeting_day not in days_with_meetings:
-    #         days_with_meetings.append(meeting_day)
-    # print(days_with_meetings)
-
-    # for meeting_day in days_with_meetings:
-    #     # check to see if all times are in taken times
-    #     # if time matches the meeting's start time
-    #     # if it does not, it means there is at least one availability on that date
-    #     for availability_event in availability_events:
-    #         if availability_event.start.hour == meeting_day[3]:
-    #             # next need to see if all times are taken
-    #             # check if the end hour matches the taken time hour 
-    #             if availability_event.end.hour == taken_time[3]:
-    #                 print(availability_event.end.minute)
-
-
-
-
-
-
-
-
-
-
+    # get all the unavailable days so they may not be selected
+    taken_days = get_taken_days(teammate, possible_weekdays, availability_events)[1]
 
     if request.method == "POST":
         # get date from datepicker
@@ -880,8 +983,9 @@ def set_date(request, child_id, teammate_id):
         'teammate': teammate,
         'current_user': current_user,
         'possible_weekdays': possible_weekdays,
-        'taken_times': taken_times
+        'taken_days': taken_days
     })
+
 
 @login_required
 def set_time(request, child_id, teammate_id, weekday, month, month_date, year):
@@ -903,43 +1007,26 @@ def set_time(request, child_id, teammate_id, weekday, month, month_date, year):
     for event in availability_events:
         if event.start.weekday() == weekday:
             times_for_day.append(event)
-    print(times_for_day)
 
-    # get all time intervals
-    hours = []
-    minutes = []
-    for i in range (0, 24):
-        hours.append(i)
-    for i in range(0, 60, 15):
-        minutes.append(i)
+    # get all possible meeting times for that time
+    possible_times = get_possible_times(times_for_day)
 
-    # initialize array of possible times
-    possible_times = []
-    # iterate through all hours in a day
-    for hour in hours:
-        # for every availability window
-        for time_for_day in times_for_day:
-            # if the hour is within availability window
-            if hour >= time_for_day.start.hour and hour <= time_for_day.end.hour:
-                # iterate through minutes
-                for minute in minutes:
-                    # if availability window is only within one hour
-                    if time_for_day.start.hour == time_for_day.end.hour:
-                        # only grab minutes of availability
-                        if minute >= time_for_day.start.minute and minute < time_for_day.end.minute:
-                            possible_times.append([hour, minute])
-                    else:
-                        # do not add if is last minute and last hour of availability
-                        if hour == time_for_day.end.hour and minute == time_for_day.end.minute:
-                            pass
-                        # grab all times if before the last hour of availability
-                        elif minute <= time_for_day.end.minute and hour <= time_for_day.end.hour:
-                            possible_times.append([hour, minute])
-                        # grab times after start time and before end time if the hour is the first hour
-                        elif minute >= time_for_day.start.minute and minute < time_for_day.end.minute and hour == time_for_day.start.hour:
-                            possible_times.append([hour, minute])
-
-    # print(possible_times)
+    # grab complete info for days with taken times
+    days_with_meetings = get_taken_days(teammate, possible_weekdays, availability_events)[0]
+    taken_times = []
+    # for any day that matches the selected day,
+    # grab all taken times
+    for wday in days_with_meetings:
+        if weekday in wday:
+            if year in wday[weekday]:
+                if month in wday[weekday][year]:
+                    if month_date in wday[weekday][year][month]:
+                        time = f"{wday[weekday][year][month][month_date][0][0]}:{wday[weekday][year][month][month_date][0][1]}"
+                        if time not in taken_times:
+                            taken_times.append(time)
+    
+    # get all the days where ALL meetings are selected so they may not be selected
+    taken_days = get_taken_days(teammate, possible_weekdays, availability_events)[1]
 
     if request.method == "POST":
         time = request.POST.get("time")
@@ -967,7 +1054,9 @@ def set_time(request, child_id, teammate_id, weekday, month, month_date, year):
         'month_date': month_date,
         'year': year,
         'possible_weekdays': possible_weekdays,
-        'possible_times': possible_times
+        'possible_times': possible_times,
+        'taken_days': taken_days,
+        'taken_times': taken_times
     })
 
 @login_required
@@ -1000,31 +1089,36 @@ def create_meeting(request, child_id, teammate_id, weekday, month, month_date, y
 
     # place start and end times on chosen weekday
     date = d.replace(year=year, month=month, day=month_date, hour=hour, minute=minute, second=0, microsecond=0)
-    print(date)
+    # print(date)
 
     if request.method == "POST":
         subject = request.POST.get("subject")
-        print(subject)
+        # print(subject)
         description = request.POST.get("description")
-        print(description)
+        # print(description)
         # create meeting
         meeting = Meeting(title=subject, description=description, invitee=teammate, created_by=current_user, child=child, date=date)
         print(meeting)
         # add time to both users' meetings
         meeting.save()
         # send out invitation by mail
+        msg_plain = render_to_string('emails/new_meeting.txt', 
+            {'user': current_user.username, 'child_name': child.first_name}
+            )
+        msg_html = render_to_string('emails/new_meeting.html', {'user': current_user.username, 'child_name': child.first_name})
+        send_mail(
+        f'APParent: {current_user.username} wants to have a meeting about {child.first_name}',
+        msg_plain,
+        settings.EMAIL_HOST_USER,
+        [f'{teammate.email}'],
+        html_message=msg_html,
+        fail_silently=False,
+        )
         # create notification
         # redirect to meetings page
-    # return redirect('create_meeting', 
-    #     child_id=child_id,
-    #     teammate_id=teammate_id,
-    #     weekday=weekday,
-    #     month=month,
-    #     month_date=month_date,
-    #     year=year,
-    #     hour=hour,
-    #     minute=minute
-    # )
+        return redirect('meetings', 
+            child_id=child_id,
+        )
 
     return render(request, 'meetings/create_meeting.html', {
         'child': child,
@@ -1078,12 +1172,10 @@ def set_availability(request):
         start_minute = int(start_time.split(',')[1][1:-1])
         end_hour = int(end_time.split(',')[0][1:])
         end_minute = int(end_time.split(',')[1][1:-1])
-        print(end_hour)
 
         # place start and end times on chosen weekday
         start = d.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
         end = d.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
-        print(start)
 
         # create new time slot
         availability = Availability_event(user=current_user, start=start, end=end)
